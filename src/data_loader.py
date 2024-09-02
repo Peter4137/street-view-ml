@@ -26,7 +26,7 @@ class StreetviewDataset(Dataset):
     def __getitem__(self, idx):
         img_path = os.path.join(self.img_dir, f"{idx}.png")
         image = read_image(img_path)
-        label = self.img_labels.iloc[idx, 1]
+        label = self.img_labels.iloc[idx]
         if self.transform:
             image = self.transform(image)
         if self.target_transform:
