@@ -2,6 +2,8 @@ import os
 import pandas as pd
 from torch.utils.data import Dataset
 from torchvision.io import read_image
+from torchvision.transforms import Resize
+import torch
 
 class StreetviewDataset(Dataset):
     """Dataset for the streetview images
@@ -14,11 +16,19 @@ class StreetviewDataset(Dataset):
             on a target.
     
     """
-    def __init__(self, annotations_file, img_dir, transform=None, target_transform=None):
-        self.img_labels = pd.read_csv(annotations_file, header=None)
+    def __init__(self, annotations_file, img_dir):
+        self.img_labels = pd.read_csv(annotations_file, header=None)[:1000]
         self.img_dir = img_dir
-        self.transform = transform
-        self.target_transform = target_transform
+
+    def transform_label(self, label):
+        return torch.tensor([
+            label[0] / 90,
+            label[1] / 180,
+        ])
+    
+    def transform_image(self, image):
+        """Scale image to 64 by 64 pixels"""
+        return Resize((64, 64))(image)
 
     def __len__(self):
         return len(self.img_labels)
@@ -26,9 +36,5 @@ class StreetviewDataset(Dataset):
     def __getitem__(self, idx):
         img_path = os.path.join(self.img_dir, f"{idx}.png")
         image = read_image(img_path)
-        label = self.img_labels.iloc[idx]
-        if self.transform:
-            image = self.transform(image)
-        if self.target_transform:
-            label = self.target_transform(label)
-        return image, label
+        label = torch.tensor(self.img_labels.iloc[idx])
+        return self.transform_image(image), self.transform_label(label)
