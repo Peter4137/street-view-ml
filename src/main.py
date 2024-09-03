@@ -1,10 +1,14 @@
+import math
 from network import Network
 import torch
-from data_loader import StreetviewDataset
+from dataset import StreetviewDataset
+from torch.utils.data import DataLoader
 from utils import display_image, plot_location_predictions, plot_losses
 
-BATCH_SIZE = 16
-NUM_EPOCHS = 10
+BATCH_SIZE = 64
+TEST_BATCH_SIZE = 10
+NUM_EPOCHS = 1
+TEST_TRAIN_SPLIT = 0.9
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device {device}")
@@ -14,9 +18,15 @@ dataset = StreetviewDataset(
     "data",
 )
 
-train_size, test_size = int(0.9 * len(dataset)), int(0.1 * len(dataset))
-img, label = dataset[0]
+training_dataset, test_dataset = torch.utils.data.random_split(
+    dataset, 
+    [math.ceil(TEST_TRAIN_SPLIT * len(dataset)), math.ceil((1-TEST_TRAIN_SPLIT) * len(dataset))]
+)
 
+training_dataloader = DataLoader(training_dataset, batch_size=BATCH_SIZE, shuffle=True)
+testing_dataloader = DataLoader(test_dataset, batch_size=TEST_BATCH_SIZE, shuffle=True)
+
+img, label = dataset[0]
 network = Network(img.shape, len(label)).to(device)
 
 loss_fn = torch.nn.MSELoss()
@@ -26,40 +36,34 @@ epoch_losses = []
 
 for epoch in range(NUM_EPOCHS):
     print(f"Epoch {epoch} - Training")
-    for i in range(0, train_size, BATCH_SIZE):
+    for i, (images, labels) in enumerate(training_dataloader):
         print(i)
-        batch_images, batch_labels = [], []
-        for j in range(BATCH_SIZE):
-            img, label = dataset[i + j]
-            batch_images.append(img)
-            batch_labels.append(label)
-        batch_images = torch.stack(batch_images).float().to(device)
-        batch_labels = torch.stack(batch_labels).float().to(device)
-
         optimizer.zero_grad()
-        result = network.forward(batch_images)
-        loss = loss_fn(result, batch_labels)
+        result = network.forward(images.to(device))
+        loss = loss_fn(result, labels.to(device))
         loss.backward()
         optimizer.step()
-    print("Epoch {epoch} - Testing")
+
+    print(f"Epoch {epoch} - Testing")
     with torch.no_grad():
-        test_images, test_labels = [], []
-        for i in range(train_size, len(dataset)):
-            img, label = dataset[i]
-            test_images.append(img)
-            test_labels.append(label)
-        test_images = torch.stack(test_images).float().to(device)
-        test_labels = torch.stack(test_labels).float().to(device)
-        result = network.forward(test_images)
-        loss = loss_fn(result, test_labels)
-        epoch_losses.append(loss.item())
-        print(f"Epoch {epoch} - Loss: {loss.item()}")
-        # plot_losses(epoch_losses)
+        all_losses = []
+        for images, labels in testing_dataloader:
+            result = network.forward(images.to(device))
+            loss = loss_fn(result, labels.to(device))
+            all_losses.append(loss.item())
+        avg_loss = sum(all_losses) / len(all_losses)
+        epoch_losses.append(avg_loss)
+        print(f"Epoch {epoch} - Loss: {avg_loss}")
 
+print(labels, result)
 plot_losses(epoch_losses)
-plot_location_predictions(result.cpu(), test_labels.cpu())
+plot_location_predictions(result.cpu(), labels.cpu(), images.cpu())
 
-
-display_image(img)
+# TODO
+# Improve hyperparameter tuning
+# Use full dataset - try using larger images
+# Change network architecture to improve results
+# Add zones to partition world, new classifier for each zone
+# Add readme
 
 

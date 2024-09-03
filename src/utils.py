@@ -2,6 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import geopandas as gpd
 from geodatasets import get_path
+import matplotlib.patches as patches
+import matplotlib.lines as mlines
 
 # plt.ion()
 
@@ -39,20 +41,45 @@ def location_from_normalised(location: np.ndarray) -> np.ndarray:
     ])
 
 
-def plot_location_predictions(predictions: np.ndarray, locations: np.ndarray) -> None:
+def plot_location_predictions(predictions: np.ndarray, locations: np.ndarray, images: np.ndarray) -> None:
     """Plot a location on a world map
     
     Args:
         location (np.ndarray): Location to plot. Expected shape is (2,)
     """
-    world = gpd.read_file(get_path("naturalearth.land"))
-    world.plot()
+    _, axs = plt.subplot_mosaic(
+        [["map" for _ in predictions],
+        [f"image{i}" for i, _ in enumerate(predictions)]],
+        layout="constrained",
+    )
 
-    for pred, loc in zip(predictions, locations):
+    world = gpd.read_file(get_path("naturalearth.land"))
+    world.plot(ax=axs["map"], alpha=0.5)
+
+    actual_marker = mlines.Line2D([], [], color='black', marker='o', linestyle='None',
+        markersize=10, label='Actual')
+    predicted_marker = mlines.Line2D([], [], color='black', marker='x', linestyle='None',
+        markersize=10, label='Predicted')
+    
+    axs["map"].legend(handles=[predicted_marker, actual_marker])
+
+    for i, (pred, loc, image) in enumerate(zip(predictions, locations, images)):
         normalised_location = location_from_normalised(loc)
         normalised_prediction = location_from_normalised(pred)
-        plt.plot([normalised_location[1], normalised_prediction[1]], [normalised_location[0], normalised_prediction[0]], marker="o", linestyle="--")
+        plot = axs["map"].plot([normalised_location[1], normalised_prediction[1]], [normalised_location[0], normalised_prediction[0]], linestyle="--")
+        axs["map"].scatter(normalised_location[1], normalised_location[0], color=plot[0].get_color(), marker="o")
+        axs["map"].scatter(normalised_prediction[1], normalised_prediction[0], color=plot[0].get_color(), marker="x")
+
+        rect = patches.Rectangle(
+            (0, 0), 
+            image.shape[1], 
+            image.shape[2] // 10, 
+            linewidth=1, 
+            facecolor=plot[0].get_color()
+        )
+
+        axs[f"image{i}"].imshow(np.transpose(image, (1, 2, 0)).int())
+        axs[f"image{i}"].axis("off")
+        axs[f"image{i}"].add_patch(rect)
 
     plt.show()
-    # plt.draw()
-    # plt.pause(0.001)
